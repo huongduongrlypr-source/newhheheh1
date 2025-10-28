@@ -58,11 +58,13 @@
 [context.production.environment]
   NODE_VERSION = "18"
 
-# Enable Netlify's built-in optimizations
-[plugins]
-  [plugins."@netlify/plugin-lighthouse"]
-    [plugins."@netlify/plugin-lighthouse".audits]
-      - "performance"
-      - "accessibility"
-      - "best-practices"
-      - "seo"
+# Enable Netlify's built-in optimizations (ĐÃ FIX SYNTAX)
+[[plugins]]
+  package = "@netlify/plugin-lighthouse"
+  [plugins.inputs]
+    audits = [
+      "performance",
+      "accessibility", 
+      "best-practices",
+      "seo"
+    ]
